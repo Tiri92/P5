@@ -2,7 +2,6 @@ package com.cleanup.todoc.database;
 
 import android.content.ContentValues;
 import android.content.Context;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.room.Database;
@@ -24,7 +23,6 @@ public abstract class SaveMyTasksDatabase extends RoomDatabase {
 
     // --- DAO ---
     public abstract TaskDao taskDao();
-
     public abstract ProjectDao projectDao();
 
     // --- INSTANCE ---
@@ -48,9 +46,8 @@ public abstract class SaveMyTasksDatabase extends RoomDatabase {
         return new Callback() {
 
             @Override
-            public void onCreate(@NonNull SupportSQLiteDatabase db) {
-                super.onCreate(db);
-                Log.println(Log.WARN, "database", "Calling prepopulateDatabase");
+            public void onOpen(@NonNull SupportSQLiteDatabase db) {
+                super.onOpen(db);
                 for (Project project : Project.getAllProjects()) {
 
                     ContentValues contentValues = new ContentValues();

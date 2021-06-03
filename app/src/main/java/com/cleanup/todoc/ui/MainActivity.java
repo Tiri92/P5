@@ -1,7 +1,6 @@
 package com.cleanup.todoc.ui;
 
 import android.content.DialogInterface;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -11,7 +10,6 @@ import androidx.lifecycle.LiveData;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -21,15 +19,19 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import com.cleanup.todoc.Injection.injection;
 import com.cleanup.todoc.R;
-import com.cleanup.todoc.database.SaveMyTasksDatabase;
-import com.cleanup.todoc.database.dao.ProjectDao;
+import com.cleanup.todoc.Injection.ViewModelFactory;
 import com.cleanup.todoc.model.Project;
 import com.cleanup.todoc.model.Task;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
 
 /**
  * <p>Home activity of the application which is displayed when the user opens the app.</p>
@@ -38,75 +40,45 @@ import java.util.Date;
  * @author Gaëtan HERFRAY
  */
 public class MainActivity extends AppCompatActivity implements TasksAdapter.DeleteTaskListener {
-    /**
-     * List of all projects available in the application
-     */
+
     private final Project[] allProjects = Project.getAllProjects();
 
-    /**
-     * List of all current tasks of the application
-     */
     @NonNull
-    private final ArrayList<Task> tasks = new ArrayList<>();
+    private ArrayList<Task> tasks = new ArrayList<>();
 
-    /**
-     * The adapter which handles the list of tasks
-     */
-    private final TasksAdapter adapter = new TasksAdapter(tasks, this);
+    private TasksAdapter adapter;
 
-    /**
-     * The sort method to be used to display tasks
-     */
     @NonNull
     private SortMethod sortMethod = SortMethod.NONE;
 
-    /**
-     * Dialog to create a new task
-     */
     @Nullable
     public AlertDialog dialog = null;
 
-    /**
-     * EditText that allows user to set the name of a task
-     */
     @Nullable
     private EditText dialogEditText = null;
 
-    /**
-     * Spinner that allows the user to associate a project to a task
-     */
     @Nullable
     private Spinner dialogSpinner = null;
 
-    /**
-     * The RecyclerView which displays the list of tasks
-     */
-    // Suppress warning is safe because variable is initialized in onCreate
-    @SuppressWarnings("NullableProblems")
-    @NonNull
-    private RecyclerView listTasks;
+    @BindView(R.id.recyclerview_list_tasks)
+     RecyclerView listTasks;
 
-    /**
-     * The TextView displaying the empty state
-     */
-    // Suppress warning is safe because variable is initialized in onCreate
-    @SuppressWarnings("NullableProblems")
-    @NonNull
-    private TextView lblNoTasks;
+    @BindView(R.id.lbl_no_task)
+    TextView lblNoTasks;
+
+    // 1 - FOR DATA
+    private TaskViewModel taskViewModel;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        initDatabase();
-
         setContentView(R.layout.activity_main);
 
-        listTasks = findViewById(R.id.list_tasks);
-        lblNoTasks = findViewById(R.id.lbl_no_task);
+        ButterKnife.bind(this);
 
-        listTasks.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
-        listTasks.setAdapter(adapter);
+        configureViewModel();
+        configureRecyclerView();
 
         findViewById(R.id.fab_add_task).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -116,14 +88,27 @@ public class MainActivity extends AppCompatActivity implements TasksAdapter.Dele
         });
     }
 
-    private void initDatabase() {
-        SaveMyTasksDatabase db = SaveMyTasksDatabase.getInstance(this);
-        if(db.projectDao().getProject(1L) == null){
-            Log.println(Log.WARN, "database","seemed not created the prepopulateDatabase");
-        }
-        else {
-            Log.println(Log.WARN, "database", "prepopulate database launched with success");
-        }
+    private void configureViewModel(){
+        ViewModelFactory mViewModelFactory = injection.provideViewModelFactory(this);
+        this.taskViewModel = mViewModelFactory.create(TaskViewModel.class);
+    }
+
+    private void configureRecyclerView(){
+        List<Task> listOfTask = getTaskDataFromDb();
+        adapter = new TasksAdapter(listOfTask, this);
+        listTasks.setAdapter(adapter);
+        listTasks.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+    }
+
+    private List<Task> getTaskDataFromDb() {
+        LiveData<List<Task>> listLiveData = taskViewModel.getTasks();
+        listLiveData.observe(this, this::onTaskDataFromDb);
+        return new ArrayList<Task>();
+    }
+
+    private void onTaskDataFromDb(List<Task> tasksFromDb) {
+        this.tasks = (ArrayList<Task>) tasksFromDb;
+        updateTasksDisplay();
     }
 
     @Override
@@ -146,7 +131,7 @@ public class MainActivity extends AppCompatActivity implements TasksAdapter.Dele
             sortMethod = SortMethod.RECENT_FIRST;
         }
 
-        updateTasks();
+        updateTasksDisplay();
 
         return super.onOptionsItemSelected(item);
     }
@@ -154,7 +139,8 @@ public class MainActivity extends AppCompatActivity implements TasksAdapter.Dele
     @Override
     public void onDeleteTask(Task task) {
         tasks.remove(task);
-        updateTasks();
+        taskViewModel.deleteTask(task.getId());
+        updateTasksDisplay();
     }
 
     /**
@@ -200,7 +186,7 @@ public class MainActivity extends AppCompatActivity implements TasksAdapter.Dele
                 dialogInterface.dismiss();
             }
         }
-        // If dialog is aloready closed
+        // If dialog is already closed
         else {
             dialogInterface.dismiss();
         }
@@ -227,14 +213,14 @@ public class MainActivity extends AppCompatActivity implements TasksAdapter.Dele
      */
     private void addTask(@NonNull Task task) {
         tasks.add(task);
-        AsyncTask.execute(() ->SaveMyTasksDatabase.getInstance(this).taskDao().insertTask(task));
-        updateTasks();
+        taskViewModel.createTask(task);
+        updateTasksDisplay();
     }
 
     /**
      * Updates the list of tasks in the UI
      */
-    private void updateTasks() {
+    private void updateTasksDisplay() {
         if (tasks.size() == 0) {
             lblNoTasks.setVisibility(View.VISIBLE);
             listTasks.setVisibility(View.GONE);
@@ -256,7 +242,7 @@ public class MainActivity extends AppCompatActivity implements TasksAdapter.Dele
                     break;
 
             }
-            adapter.updateTasks(tasks);
+            adapter.setTasks(tasks);
         }
     }
 

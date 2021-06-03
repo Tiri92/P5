@@ -25,18 +25,8 @@ public interface TaskDao {
     @Query("DELETE FROM Task WHERE id = :taskId")
     int deleteTask(long taskId);
 
+    @Query("DELETE FROM Task")
+    int deleteAllTasks();
+
 }
 
-/*
-@Query("SELECT * FROM Task")
-    public Single<List<Task>> getTasks();
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    public Completable insertTask(Task task);
-
-    @Update
-    public Completable updateTask(Task task);
-
-    @Query("DELETE FROM Task WHERE id = :taskId")
-    public Completable deleteTask(long taskId);
- */
